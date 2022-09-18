@@ -26,21 +26,45 @@ using namespace std;
 
 #define INF 114514.0
 
-// 输出图像分辨率
-const int WIDTH = 256;
-const int HEIGHT = 256;
+std::uniform_real_distribution<> dis(0.0, 1.0);
+random_device rd;
+mt19937 gen(rd());
 
-// 采样次数
-const int SAMPLE = 4096;
-// 每次采样的亮度
-const double BRIGHTNESS = (2.0f * 3.1415926f) * (1.0f / double(SAMPLE));
+double randf(){
+    return dis(gen);
+}
 
-void readOBJ(
-        string filepath,
-        vector<vec3>& points,
-        vector<vec2>& texCoords,
-        vector<vec3>& normals
-        ){
+typedef struct Triangle{
+    vec3 p1, p2, p3;
+    vec3 center;
+    Triangle(vec3 a, vec3 b, vec3 c){
+        p1 = a;
+        p2 = b;
+        p3 = c;
+        center = (p1+p2+p3) / vec3(3, 3, 3);
+    }
+}Triangle;
+
+struct BVHNode{
+    BVHNode* left = nullptr;    // 左子树索引
+    BVHNode* right = nullptr;   // 右子树索引
+    int n, index;               // 叶子节点信息
+    vec3 AA, BB;                // 碰撞盒: AA 是包围盒的数值小的坐标，BB 是数值大的坐标
+};
+
+tm getTime(){
+    time_t rawtime;
+    struct tm *ptminfo;
+    time(&rawtime);
+    ptminfo = localtime(&rawtime);
+    return *ptminfo;
+}
+
+void readOBJ(string filepath,
+             vector<vec3>& points,
+             vector<vec2>& texCoords,
+             vector<vec3>& normals
+){
     // 顶点属性
     vector<vec3> vertexPosition;
     vector<vec2> vertexTexCoord;
@@ -62,242 +86,62 @@ void readOBJ(
     while(getline(fin, line)){
         istringstream sin(line);    // 以一行的数据作为 string stream 解析并且读取
         string type;
-        float x, y, z;
+        GLfloat x, y, z;
+        int v0, vt0, vn0;              // 面片第 1 个顶点的【位置，纹理坐标，法线】索引
+        int v1, vt1, vn1;              //       2
+        int v2, vt2, vn2;              //       3
+        char slash;
 
-
-    }
-
-}
-
-
-typedef struct Ray{
-    vec3 startPoint = vec3(0, 0, 0);
-    vec3 direction  = vec3(0, 0, 0);
-}Ray;
-
-typedef struct Material{
-    bool isEmissive     = false;                    // 是否发光
-    vec3 normal         = vec3(0, 0, 0);    // 法向量
-    vec3 color          = vec3(0, 0, 0);    // 颜色
-    double specularRate = 0.0f;                     // 反射率, 反射光占比
-    double roughness    = 1.0f;                     // 粗糙程度
-    double refractRate  = 0.0f;                     // 折射光占比
-    double refractAngle = 1.0f;                     // 折射率
-    double refractRoughness = 0.0f;                 // 折射粗糙度
-
-}Material;
-
-typedef struct HitResult{
-    bool isHit      = false;                    // 是否命中
-    double distance = 0.0f;                     // 与交点的距离
-    vec3 hitPoint   = vec3(0, 0, 0);    // 光线命中点
-    Material        material;                   // 命中点表面的材质
-};
-
-class Shape{
-public:
-    Shape(){}
-    virtual HitResult intersect(Ray ray){   return HitResult(); }
-};
-
-class Triangle : public Shape{
-public:
-    Triangle(){}
-    Triangle(vec3 P1, vec3 P2, vec3 P3, vec3 C){
-        p1 = P1;
-        p2 = P2;
-        p3 = P3;
-        material.normal = normalize(cross(p2-p1, p3-p1));
-        material.color = C;
-    }
-    HitResult intersect(Ray ray){
-        HitResult res;
-
-        vec3 S = ray.startPoint;
-        vec3 d = ray.direction;
-        vec3 N = material.normal;
-        if(dot(N, d) > 0)   N = -N;     // 获取正确的法向量
-
-        // 如果视线和三角形平行
-        if(fabs(dot(N, d)) < 0.00001f)  return res;
-
-        // 距离
-        float t = (dot(N, p1) - dot(S, N)) / dot(d, N);
-        if(t < 0.00005f)    return res;     // 如果三角形在相机背面
-
-        // 交点计算
-        vec3 P = S + d * t;
-
-        // 判断交点是否在三角形内
-        vec3 c1 = cross(p2-p1, P-p1);
-        vec3 c2 = cross(p3-p2, P-p2);
-        vec3 c3 = cross(p1-p3, P-p3);
-        vec3 n  = material.normal;  // 需要 "原生法向量" 来判断
-        if(dot(c1, n)<0 || dot(c2, n)<0 || dot(c3,n)<0)     return res;
-
-        // 装填返回结果
-        res.isHit           = true;
-        res.distance        = t;
-        res.material        = material;
-        res.hitPoint        = P;
-        res.material.normal = N;
-
-        return res;
-    }
-public:
-    vec3 p1, p2, p3;    // 顶点
-    Material material;  // 材质
-};
-
-class Sphere : public Shape{
-public:
-    Sphere(){};
-    Sphere(vec3 o, double r, vec3 c, double spec, double rough){
-        O = o;
-        R = r;
-        material.color = c;
-        material.specularRate = spec;
-        material.roughness = rough;
-    }
-
-    HitResult intersect(Ray ray){
-        HitResult res;
-        vec3 S = ray.startPoint;
-        vec3 Dir = ray.direction;
-        float OS = length(O-S);
-        float SH = dot(O-S, Dir);
-        float OH = sqrt(pow(OS, 2) - pow(SH, 2));
-        float PH = sqrt(pow(R, 2) - pow(OH, 2));
-
-        if(OH > R)      return res;     // OH大于半径则不相交
-        float t1 = length(SH) - PH;
-        float t2 = length(SH) + PH;
-        float t = (t1<0) ? t2 : t1;     // 最近距离
-        vec3 P = S + t*Dir;             // 交点
-
-        // 防止自己交自己
-        if(fabs(t1)<0.0005f || fabs(t2)<0.0005f)    return res;
-
-        // 装填返回结果
-        res.isHit = true;
-        res.material = material;
-        res.hitPoint = P;
-        res.distance = t;
-        res.material.normal = normalize(P - O); // 要返回正确的法向
-        return res;
-    }
-
-public:
-    vec3 O;
-    double R;
-    Material material;
-};
-
-vector<Shape*> shapes;      // 几何物体的集合
-
-std::uniform_real_distribution<> dis(0.0, 1.0);
-random_device rd;
-mt19937 gen(rd());
-
-double randf(){
-    return dis(gen);
-}
-
-void imshow(double* SRC){
-    unsigned char* image = new unsigned char[WIDTH * HEIGHT * 3];   // 图像buffer
-    unsigned char* p = image;
-    double* S = SRC;    // 源数据
-    FILE* fp = fopen("../image_8_Final.png", "wb");
-    for(int i=0;i<HEIGHT;i++){
-        for(int j=0;j<WIDTH;j++){
-            *p++ = (unsigned char)clamp(pow(*S++, 1.0f / 2.2f) * 255, 0.0, 255.0);  // R 通道
-            *p++ = (unsigned char)clamp(pow(*S++, 1.0f / 2.2f) * 255, 0.0, 255.0);  // G 通道
-            *p++ = (unsigned char)clamp(pow(*S++, 1.0f / 2.2f) * 255, 0.0, 255.0);  // B 通道
+        // 读取obj文件
+        sin >> type;
+        if(type == "v"){
+            sin >> x >> y >> z;
+            vertexPosition.push_back(vec3(x, y, z));
+        }
+        else if(type == "vt"){
+            sin >> x >> y;
+            vertexTexCoord.push_back(vec2(x, y));
+        }
+        else if(type == "vn"){
+            sin >> x >> y >> z;
+            vertexNormal.push_back(vec3(x, y, z));
+        }
+        else if(type == "f"){
+            sin >> v0 >> slash >> vt0 >> slash >> vn0;
+            sin >> v1 >> slash >> vt1 >> slash >> vn1;
+            sin >> v2 >> slash >> vt2 >> slash >> vn2;
+            positionIndex.push_back(ivec3(v0-1, v1-1, v2-1));
+            texCoordIndex.push_back(ivec3(vt0-1, vt1-1, vt2-1));
+            normalIndex.push_back(ivec3(vn0-1, vn1-1, vn2-1));
         }
     }
-    svpng(fp, WIDTH, HEIGHT, image, 0);
-}
+    // 根据面片信息生成最终传入顶点着色器的顶点数据
+    for(int i=0;i<positionIndex.size();i++){
+        // 顶点位置
+        points.push_back(vertexPosition[positionIndex[i].x]);
+        points.push_back(vertexPosition[positionIndex[i].y]);
+        points.push_back(vertexPosition[positionIndex[i].z]);
 
-HitResult shoot(vector<Shape*> shapes, Ray ray){
-    HitResult res, r;
-    res.distance = INFINITY;
-    for(auto& shape : shapes){
-        r = shape->intersect(ray);
-        if(r.isHit && r.distance < res.distance)    res = r;    // 记录距离最近的求交结果
+        // 顶点纹理坐标
+        texCoords.push_back(vertexTexCoord[texCoordIndex[i].x]);
+        texCoords.push_back(vertexTexCoord[texCoordIndex[i].y]);
+        texCoords.push_back(vertexTexCoord[texCoordIndex[i].z]);
+
+        // 顶点法线
+        normals.push_back(vertexNormal[normalIndex[i].x]);
+        normals.push_back(vertexNormal[normalIndex[i].y]);
+        normals.push_back(vertexNormal[normalIndex[i].z]);
     }
-    return res;
 }
 
-vec3 randomVec3(){
-    vec3 d;
-    do{
-        d = 2.0f * vec3(randf(), randf(), randf()) - vec3(1.0, 1.0, 1.0);
-    }while(dot(d, d) > 1.0f);
-    return normalize(d);
+bool cmpx(const Triangle& t1, const Triangle& t2){
+    return t1.center.x < t2.center.x;
 }
-
-vec3 randomDirection(vec3 n){
-    return normalize(randomVec3() + n);
+bool cmpy(const Triangle& t1, const Triangle& t2){
+    return t1.center.y < t2.center.y;
 }
-
-vec3 pathTracing(vector<Shape*> shapes, Ray ray, int depth){
-    // 大于8层直接返回
-    if(depth > 8)   return vec3(0, 0, 0);
-
-    HitResult res = shoot(shapes, ray);
-
-    // 未命中
-    if(!res.isHit)                  return vec3(0, 0, 0);
-
-    // 如果发光则返回颜色
-    if(res.material.isEmissive)     return res.material.color;
-
-    // 有 P 的概率终止
-    double r = randf();
-    float P = 0.8;
-    if(r > P)   return vec3(0, 0, 0);
-
-    // 否则继续
-    Ray randomRay;
-    randomRay.startPoint = res.hitPoint;
-    randomRay.direction  = randomDirection(res.material.normal);
-
-    vec3 color = vec3(0, 0, 0);
-    float cosine = dot(-ray.direction, res.material.normal);
-
-    // 根据反射率决定光线最终的方向
-    r = randf();
-    // 当随机数小于 reflectRate 的时候发生反射，
-    // 随机数在 reflectRate 和 refractRate 之间发生折射，
-    // 随机数大于 refractRate 的时候才是漫反射
-    if(r < res.material.specularRate){      // 镜面反射
-        // 我们反射的时候不再按照反射光线的方向，而是根据粗糙度，在随机向量和反射光线的方向做一个*线性插值*以决定最终反射的方向
-        vec3 reflect = normalize(glm::reflect(ray.direction ,res.material.normal));
-        randomRay.direction = mix(reflect, randomRay.direction, res.material.roughness);
-        color = pathTracing(shapes, randomRay, depth+1) * cosine;
-    }
-    else if(r<res.material.refractRate && r>res.material.specularRate){
-        vec3 refract = normalize(glm::refract(ray.direction, res.material.normal, float(res.material.refractAngle)));
-        randomRay.direction = mix(refract, -randomRay.direction, res.material.refractRoughness);
-        color = pathTracing(shapes, randomRay, depth+1) * cosine;
-    }
-    else{
-        vec3 srcColor = res.material.color;
-        vec3 ptColor = pathTracing(shapes, randomRay, depth+1) * cosine;
-        color = ptColor * srcColor;    // 和原颜色混合
-    }
-
-    // 否则直接返回
-    return color/P;
+bool cmpz(const Triangle& t1, const Triangle& t2){
+    return t1.center.z < t2.center.z;
 }
-
-tm getTime(){
-    time_t rawtime;
-    struct tm *ptminfo;
-    time(&rawtime);
-    ptminfo = localtime(&rawtime);
-    return *ptminfo;
-}
-
 
 #endif //EASYRT_COMMON_H
