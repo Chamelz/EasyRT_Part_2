@@ -1,4 +1,4 @@
-#include <iostream>
+#include "common.h"
 
 int main() {
     std::cout << "RAY_TRACING_PART_2" << std::endl;
