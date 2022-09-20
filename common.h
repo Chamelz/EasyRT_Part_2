@@ -21,8 +21,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <camera.h>
-#include <stb_image.h>
+// #include <stb_image.h>
 #include <shader_m.h>
+#include <model.h>
 
 using namespace glm;
 using namespace std;
@@ -523,7 +524,6 @@ void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.ProcessKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -556,8 +556,8 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
         firstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    float xoffset = (xpos - lastX);
+    float yoffset = (lastY - ypos); // reversed since y-coordinates go from bottom to top
 
     lastX = xpos;
     lastY = ypos;
@@ -610,8 +610,8 @@ unsigned int loadTexture(char const * path)
 
     return textureID;
 }
-// 显示回调函数
-void display(GLuint program) {
 
-}
+
+// 显示回调函数
+
 #endif //EASYRT_COMMON_H

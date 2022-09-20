@@ -3,6 +3,7 @@ project(EasyRT)
 
 set(CMAKE_CXX_STANDARD 14)
 link_directories(/usr/local/Cellar/glfw/3.3.7/lib)
+find_package(assimp REQUIRED) # 添加assimp
 
 include_directories(/Users/xyz/include/glm/)
 include_directories(/Users/xyz/include)
@@ -16,4 +17,5 @@ add_executable(EasyRT main.cpp common.h /Users/xyz/include/glad/src/glad.c)
 target_link_libraries(
         EasyRT
         glfw
+        assimp::assimp
 )
