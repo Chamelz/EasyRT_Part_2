@@ -21,7 +21,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <camera.h>
-// #include <stb_image.h>
 #include <shader_m.h>
 #include <model.h>
 
